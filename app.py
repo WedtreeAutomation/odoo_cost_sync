@@ -454,9 +454,9 @@ def main():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    login_btn = st.form_submit_button("Login", type="primary", use_container_width=True)
+                    login_btn = st.form_submit_button("Login", type="primary", width='stretch')
                 with col2:
-                    if st.form_submit_button("Clear", use_container_width=True):
+                    if st.form_submit_button("Clear", width='stretch'):
                         st.rerun()
             
             st.markdown('</div>', unsafe_allow_html=True)
@@ -540,7 +540,7 @@ def main():
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🔄 Refresh Data", use_container_width=True, help="Clear all data and refresh"):
+                if st.button("🔄 Refresh Data", width='stretch', help="Clear all data and refresh"):
                     st.session_state.products_df = None
                     st.session_state.selected_products = set()
                     st.session_state.ref_cost_map = {}
@@ -549,7 +549,7 @@ def main():
                     st.rerun()
             
             with col2:
-                if st.button("🚪 Logout", use_container_width=True, type="secondary", help="Logout from the application"):
+                if st.button("🚪 Logout", width='stretch', type="secondary", help="Logout from the application"):
                     logout()
             
             # Current Stats
@@ -595,7 +595,7 @@ def main():
                 # Fetch Products Button
                 if st.button("🔍 **Fetch Products**", 
                            type="primary", 
-                           use_container_width=True,
+                           width='stretch',
                            help=f"Load products from {st.session_state.target_store_name}"):
                     with st.spinner(f"Fetching products from {st.session_state.target_store_name}..."):
                         products = fetch_target_products(st.session_state.uid, 
@@ -617,7 +617,7 @@ def main():
                 # Clear Selection Button
                 if st.session_state.products_df is not None:
                     if st.button("🗑️ **Clear Selection**", 
-                               use_container_width=True,
+                               width='stretch',
                                help="Deselect all products"):
                         st.session_state.selected_products = set()
                         st.rerun()
@@ -649,12 +649,12 @@ def main():
                     if not filtered_df.empty:
                         col1, col2, col3 = st.columns([1, 1, 2])
                         with col1:
-                            if st.button("✅ Select All", use_container_width=True):
+                            if st.button("✅ Select All", width='stretch'):
                                 # Update set with all IDs from filtered list
                                 st.session_state.selected_products.update(filtered_df.index.tolist())
                                 st.rerun()
                         with col2:
-                            if st.button("❌ Deselect All", use_container_width=True):
+                            if st.button("❌ Deselect All", width='stretch'):
                                 # Remove filtered IDs from set
                                 st.session_state.selected_products.difference_update(filtered_df.index.tolist())
                                 st.rerun()
@@ -671,7 +671,7 @@ def main():
                         with col1:
                             if st.button("◀ Previous", 
                                        disabled=st.session_state.page_number <= 1, 
-                                       use_container_width=True):
+                                       width='stretch'):
                                 st.session_state.page_number -= 1
                                 st.rerun()
                         with col2:
@@ -680,7 +680,7 @@ def main():
                         with col3:
                             if st.button("Next ▶", 
                                        disabled=st.session_state.page_number >= total_pages,
-                                       use_container_width=True):
+                                       width='stretch'):
                                 st.session_state.page_number += 1
                                 st.rerun()
                         
@@ -700,11 +700,12 @@ def main():
                             col1, col2 = st.columns([0.8, 9.2])
                             
                             with col1:
+                                # FIX: Added a descriptive label instead of ""
                                 st.checkbox(
-                                    "",
+                                    f"Select {row['name']}",  # Non-empty label required
                                     value=is_selected,
                                     key=f"chk_{original_idx}",
-                                    label_visibility="collapsed",
+                                    label_visibility="collapsed", # This hides the label visually
                                     on_change=toggle_selection,
                                     args=(original_idx,)
                                 )
@@ -756,7 +757,7 @@ def main():
                     
                     if st.button("📥 **Fetch Reference Costs**", 
                                type="primary",
-                               use_container_width=True,
+                               width='stretch',
                                help="Get costs from source store"):
                         with st.spinner(f"Fetching costs from {st.session_state.source_store_name}..."):
                             refs = target_batch['default_code'].dropna().unique().tolist()
@@ -794,7 +795,7 @@ def main():
                         
                         if st.button("🚀 **Execute Cost Updates**", 
                                    type="primary",
-                                   use_container_width=True,
+                                   width='stretch',
                                    key="execute_updates",
                                    help="Apply cost updates to target store"):
                             
@@ -878,7 +879,7 @@ def main():
                             data=st.session_state.results_df.to_csv(index=False).encode('utf-8'),
                             file_name=f"cost_sync_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                             mime="text/csv",
-                            use_container_width=True
+                            width='stretch'
                         )
                     
                     if st.session_state.last_action:
@@ -892,7 +893,7 @@ def main():
                     # Display dataframe
                     st.dataframe(
                         st.session_state.results_df,
-                        use_container_width=True,
+                        width='stretch',
                         hide_index=True,
                         height=300
                     )
