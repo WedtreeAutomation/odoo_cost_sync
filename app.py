@@ -14,8 +14,11 @@ ODOO_URL = os.getenv('ODOO_URL')
 ODOO_DB = os.getenv('ODOO_DB')
 ODOO_USERNAME = os.getenv('ODOO_USERNAME')
 ODOO_PASSWORD = os.getenv('ODOO_PASSWORD')
-APP_USERNAME = os.getenv('APP_USERNAME', 'admin')
-APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
+APP_USERNAME = os.getenv('APP_USERNAME')
+APP_PASSWORD = os.getenv('APP_PASSWORD')
+
+# --- CONSTANTS ---
+SOURCE_STORE_NAME = "Wedtree eStore Private Limited - HO"
 
 # --- SESSION STATE INITIALIZATION ---
 def init_session_state():
@@ -35,7 +38,7 @@ def init_session_state():
         'target_store_id': None,
         'source_store_id': None,
         'target_store_name': '',
-        'source_store_name': ''
+        'source_store_name': SOURCE_STORE_NAME # Default to hardcoded value
     }
     
     for key, value in defaults.items():
@@ -49,6 +52,24 @@ def toggle_selection(product_idx):
         st.session_state.selected_products.discard(product_idx)
     else:
         st.session_state.selected_products.add(product_idx)
+
+def on_target_change():
+    """Callback to update target store ID when dropdown changes"""
+    # 1. Get the new name from the widget key
+    new_name = st.session_state.target_store_select
+    st.session_state.target_store_name = new_name
+    
+    # 2. Find and update the ID
+    company_map = {c['name']: c['id'] for c in st.session_state.companies}
+    if new_name in company_map:
+        st.session_state.target_store_id = company_map[new_name]
+    
+    # 3. Clear existing data since store changed
+    st.session_state.products_df = None
+    st.session_state.selected_products = set()
+    st.session_state.ref_cost_map = {}
+    st.session_state.results_df = None
+    st.session_state.page_number = 1
 
 # --- CUSTOM CSS FOR ENHANCED UI ---
 st.markdown("""
@@ -312,24 +333,33 @@ def login(username, password):
         if not companies:
             return False, "No companies found in Odoo"
         
+        # Generate Map
+        company_map = {c['name']: c['id'] for c in companies}
+        
+        # -----------------------------------------------------
+        # FIX: Validate Source Store Exists
+        # -----------------------------------------------------
+        if SOURCE_STORE_NAME not in company_map:
+            return False, f"Source Store '{SOURCE_STORE_NAME}' not found in Odoo."
+            
         st.session_state.uid = uid
         st.session_state.models = models
         st.session_state.companies = companies
         st.session_state.logged_in = True
         st.session_state.login_error = None
         
-        # Set default stores
-        company_map = {c['name']: c['id'] for c in companies}
         store_names = list(company_map.keys())
         
-        # Find HO and T Nagar stores
-        ho_store = next((name for name in store_names if 'HO' in name.upper()), store_names[0])
-        t_nagar_store = next((name for name in store_names if 'T NAGAR' in name.upper() or 'T-NAGAR' in name.upper()), store_names[0])
+        # Set Source Store (Hardcoded)
+        st.session_state.source_store_name = SOURCE_STORE_NAME
+        st.session_state.source_store_id = company_map[SOURCE_STORE_NAME]
         
-        st.session_state.target_store_name = t_nagar_store
-        st.session_state.source_store_name = ho_store
-        st.session_state.target_store_id = company_map.get(t_nagar_store)
-        st.session_state.source_store_id = company_map.get(ho_store)
+        # Set Default Target Store (First one that isn't the source)
+        available_targets = [name for name in store_names if name != SOURCE_STORE_NAME]
+        default_target = available_targets[0] if available_targets else SOURCE_STORE_NAME
+        
+        st.session_state.target_store_name = default_target
+        st.session_state.target_store_id = company_map.get(default_target)
         
         return True, "Login successful"
     else:
@@ -341,25 +371,6 @@ def logout():
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.rerun()
-
-# --- STORE CONFIGURATION UPDATE ---
-def update_store_config():
-    """Update store configuration from sidebar"""
-    company_map = {c['name']: c['id'] for c in st.session_state.companies}
-    
-    # Update IDs based on selected names
-    if st.session_state.target_store_name in company_map:
-        st.session_state.target_store_id = company_map[st.session_state.target_store_name]
-    
-    if st.session_state.source_store_name in company_map:
-        st.session_state.source_store_id = company_map[st.session_state.source_store_name]
-    
-    # Clear product data when stores change
-    st.session_state.products_df = None
-    st.session_state.selected_products = set()
-    st.session_state.ref_cost_map = {}
-    st.session_state.results_df = None
-    st.session_state.page_number = 1
 
 # --- LANDING PAGE FUNCTION ---
 def show_landing_page():
@@ -504,34 +515,32 @@ def main():
             
             if st.session_state.companies:
                 company_names = [c['name'] for c in st.session_state.companies]
-                company_map = {c['name']: c['id'] for c in st.session_state.companies}
                 
-                # Target Store
-                target_store = st.selectbox(
+                # 1. Source Store (Static Display)
+                st.markdown("**📊 Source Store**")
+                st.info(f"{st.session_state.source_store_name}", icon="🏢")
+                
+                # 2. Target Store (Dropdown with Fixed Callback)
+                # Ensure current selection is valid
+                current_index = 0
+                if st.session_state.target_store_name in company_names:
+                    current_index = company_names.index(st.session_state.target_store_name)
+                
+                st.selectbox(
                     "🎯 **Target Store**",
                     options=company_names,
-                    index=company_names.index(st.session_state.target_store_name) if st.session_state.target_store_name in company_names else 0,
-                    key="target_store_select",
+                    index=current_index,
+                    key="target_store_select", # Widget key
                     help="Store where products need cost updates",
-                    on_change=update_store_config
+                    on_change=on_target_change # Dedicated callback
                 )
                 
-                # Source Store
-                source_store = st.selectbox(
-                    "📊 **Source Store**",
-                    options=company_names,
-                    index=company_names.index(st.session_state.source_store_name) if st.session_state.source_store_name in company_names else 0,
-                    key="source_store_select",
-                    help="Store to copy costs from",
-                    on_change=update_store_config
-                )
-                
-                # Store icons
+                # Store icons / IDs
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.markdown(f"**Target ID:** `{st.session_state.target_store_id or 'Not set'}`")
+                    st.caption(f"Target ID: `{st.session_state.target_store_id or '?'}`")
                 with col2:
-                    st.markdown(f"**Source ID:** `{st.session_state.source_store_id or 'Not set'}`")
+                    st.caption(f"Source ID: `{st.session_state.source_store_id}`")
             
             st.markdown("---")
             
@@ -597,22 +606,27 @@ def main():
                            type="primary", 
                            width='stretch',
                            help=f"Load products from {st.session_state.target_store_name}"):
-                    with st.spinner(f"Fetching products from {st.session_state.target_store_name}..."):
-                        products = fetch_target_products(st.session_state.uid, 
-                                                       st.session_state.models, 
-                                                       st.session_state.target_store_id)
-                        if products:
-                            df = pd.DataFrame(products)
-                            if 'categ_id' in df.columns:
-                                df['category'] = df['categ_id'].apply(
-                                    lambda x: x[1] if isinstance(x, list) else ''
-                                )
-                            st.session_state.products_df = df
-                            st.session_state.selected_products = set()
-                            st.session_state.page_number = 1
-                            st.success(f"✅ Found {len(df)} products with zero cost")
-                        else:
-                            st.warning("⚠️ No products found with zero cost")
+                    
+                    # Ensure we have a target store selected
+                    if not st.session_state.target_store_id:
+                         st.error("Please select a target store first.")
+                    else:
+                        with st.spinner(f"Fetching products from {st.session_state.target_store_name} (ID: {st.session_state.target_store_id})..."):
+                            products = fetch_target_products(st.session_state.uid, 
+                                                           st.session_state.models, 
+                                                           st.session_state.target_store_id)
+                            if products:
+                                df = pd.DataFrame(products)
+                                if 'categ_id' in df.columns:
+                                    df['category'] = df['categ_id'].apply(
+                                        lambda x: x[1] if isinstance(x, list) else ''
+                                    )
+                                st.session_state.products_df = df
+                                st.session_state.selected_products = set()
+                                st.session_state.page_number = 1
+                                st.success(f"✅ Found {len(df)} products with zero cost")
+                            else:
+                                st.warning("⚠️ No products found with zero cost")
                 
                 # Clear Selection Button
                 if st.session_state.products_df is not None:
@@ -700,12 +714,11 @@ def main():
                             col1, col2 = st.columns([0.8, 9.2])
                             
                             with col1:
-                                # FIX: Added a descriptive label instead of ""
                                 st.checkbox(
-                                    f"Select {row['name']}",  # Non-empty label required
+                                    f"Select {row['name']}",
                                     value=is_selected,
                                     key=f"chk_{original_idx}",
-                                    label_visibility="collapsed", # This hides the label visually
+                                    label_visibility="collapsed",
                                     on_change=toggle_selection,
                                     args=(original_idx,)
                                 )
