@@ -336,9 +336,7 @@ def login(username, password):
         # Generate Map
         company_map = {c['name']: c['id'] for c in companies}
         
-        # -----------------------------------------------------
         # FIX: Validate Source Store Exists
-        # -----------------------------------------------------
         if SOURCE_STORE_NAME not in company_map:
             return False, f"Source Store '{SOURCE_STORE_NAME}' not found in Odoo."
             
@@ -521,7 +519,6 @@ def main():
                 st.info(f"{st.session_state.source_store_name}", icon="🏢")
                 
                 # 2. Target Store (Dropdown with Fixed Callback)
-                # Ensure current selection is valid
                 current_index = 0
                 if st.session_state.target_store_name in company_names:
                     current_index = company_names.index(st.session_state.target_store_name)
@@ -607,7 +604,6 @@ def main():
                            width='stretch',
                            help=f"Load products from {st.session_state.target_store_name}"):
                     
-                    # Ensure we have a target store selected
                     if not st.session_state.target_store_id:
                          st.error("Please select a target store first.")
                     else:
@@ -634,6 +630,10 @@ def main():
                                width='stretch',
                                help="Deselect all products"):
                         st.session_state.selected_products = set()
+                        # FIX: Clear checkbox widgets on Deselect All
+                        for key in list(st.session_state.keys()):
+                            if key.startswith("chk_"):
+                                del st.session_state[key]
                         st.rerun()
             
             with col1:
@@ -666,11 +666,19 @@ def main():
                             if st.button("✅ Select All", width='stretch'):
                                 # Update set with all IDs from filtered list
                                 st.session_state.selected_products.update(filtered_df.index.tolist())
+                                # FIX: Clear widget history so Streamlit respects the new TRUE value
+                                for key in list(st.session_state.keys()):
+                                    if key.startswith("chk_"):
+                                        del st.session_state[key]
                                 st.rerun()
                         with col2:
                             if st.button("❌ Deselect All", width='stretch'):
                                 # Remove filtered IDs from set
                                 st.session_state.selected_products.difference_update(filtered_df.index.tolist())
+                                # FIX: Clear widget history so Streamlit respects the new FALSE value
+                                for key in list(st.session_state.keys()):
+                                    if key.startswith("chk_"):
+                                        del st.session_state[key]
                                 st.rerun()
                         with col3:
                             st.caption(f"**{len(filtered_df)}** products matched • **{len(st.session_state.selected_products)}** selected")
