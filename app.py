@@ -14,8 +14,8 @@ ODOO_URL = os.getenv('ODOO_URL')
 ODOO_DB = os.getenv('ODOO_DB')
 ODOO_USERNAME = os.getenv('ODOO_USERNAME')
 ODOO_PASSWORD = os.getenv('ODOO_PASSWORD')
-APP_USERNAME = os.getenv('APP_USERNAME')
-APP_PASSWORD = os.getenv('APP_PASSWORD')
+APP_USERNAME = os.getenv('APP_USERNAME', 'admin')
+APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
 
 # --- CONSTANTS ---
 SOURCE_STORE_NAME = "Wedtree eStore Private Limited - HO"
@@ -38,7 +38,8 @@ def init_session_state():
         'target_store_id': None,
         'source_store_id': None,
         'target_store_name': '',
-        'source_store_name': SOURCE_STORE_NAME # Default to hardcoded value
+        'source_store_name': SOURCE_STORE_NAME,
+        'key_version': 0  # <--- NEW: Controls widget reset for checkboxes
     }
     
     for key, value in defaults.items():
@@ -70,6 +71,7 @@ def on_target_change():
     st.session_state.ref_cost_map = {}
     st.session_state.results_df = None
     st.session_state.page_number = 1
+    st.session_state.key_version = 0  # Reset version on store change
 
 # --- CUSTOM CSS FOR ENHANCED UI ---
 st.markdown("""
@@ -336,7 +338,7 @@ def login(username, password):
         # Generate Map
         company_map = {c['name']: c['id'] for c in companies}
         
-        # FIX: Validate Source Store Exists
+        # Validate Source Store Exists
         if SOURCE_STORE_NAME not in company_map:
             return False, f"Source Store '{SOURCE_STORE_NAME}' not found in Odoo."
             
@@ -519,6 +521,7 @@ def main():
                 st.info(f"{st.session_state.source_store_name}", icon="🏢")
                 
                 # 2. Target Store (Dropdown with Fixed Callback)
+                # Ensure current selection is valid
                 current_index = 0
                 if st.session_state.target_store_name in company_names:
                     current_index = company_names.index(st.session_state.target_store_name)
@@ -552,6 +555,7 @@ def main():
                     st.session_state.ref_cost_map = {}
                     st.session_state.results_df = None
                     st.session_state.page_number = 1
+                    st.session_state.key_version = 0
                     st.rerun()
             
             with col2:
@@ -604,6 +608,7 @@ def main():
                            width='stretch',
                            help=f"Load products from {st.session_state.target_store_name}"):
                     
+                    # Ensure we have a target store selected
                     if not st.session_state.target_store_id:
                          st.error("Please select a target store first.")
                     else:
@@ -620,6 +625,7 @@ def main():
                                 st.session_state.products_df = df
                                 st.session_state.selected_products = set()
                                 st.session_state.page_number = 1
+                                st.session_state.key_version = 0 # Reset widgets
                                 st.success(f"✅ Found {len(df)} products with zero cost")
                             else:
                                 st.warning("⚠️ No products found with zero cost")
@@ -630,10 +636,7 @@ def main():
                                width='stretch',
                                help="Deselect all products"):
                         st.session_state.selected_products = set()
-                        # FIX: Clear checkbox widgets on Deselect All
-                        for key in list(st.session_state.keys()):
-                            if key.startswith("chk_"):
-                                del st.session_state[key]
+                        st.session_state.key_version += 1 # Reset widgets
                         st.rerun()
             
             with col1:
@@ -666,19 +669,15 @@ def main():
                             if st.button("✅ Select All", width='stretch'):
                                 # Update set with all IDs from filtered list
                                 st.session_state.selected_products.update(filtered_df.index.tolist())
-                                # FIX: Clear widget history so Streamlit respects the new TRUE value
-                                for key in list(st.session_state.keys()):
-                                    if key.startswith("chk_"):
-                                        del st.session_state[key]
+                                # FIX: Update version to force redraw of checkboxes
+                                st.session_state.key_version += 1 
                                 st.rerun()
                         with col2:
                             if st.button("❌ Deselect All", width='stretch'):
                                 # Remove filtered IDs from set
                                 st.session_state.selected_products.difference_update(filtered_df.index.tolist())
-                                # FIX: Clear widget history so Streamlit respects the new FALSE value
-                                for key in list(st.session_state.keys()):
-                                    if key.startswith("chk_"):
-                                        del st.session_state[key]
+                                # FIX: Update version to force redraw of checkboxes
+                                st.session_state.key_version += 1 
                                 st.rerun()
                         with col3:
                             st.caption(f"**{len(filtered_df)}** products matched • **{len(st.session_state.selected_products)}** selected")
@@ -722,10 +721,11 @@ def main():
                             col1, col2 = st.columns([0.8, 9.2])
                             
                             with col1:
+                                # FIX: Versioned Key Logic to force re-render
                                 st.checkbox(
                                     f"Select {row['name']}",
                                     value=is_selected,
-                                    key=f"chk_{original_idx}",
+                                    key=f"chk_{original_idx}_v{st.session_state.key_version}", # Dynamic Key
                                     label_visibility="collapsed",
                                     on_change=toggle_selection,
                                     args=(original_idx,)
